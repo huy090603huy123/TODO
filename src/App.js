@@ -1,112 +1,295 @@
-import React from 'react';
-import { Provider } from 'react-redux';
-import { store } from './store';
-import { useLocalStorage, useTranslation } from './hooks';
-import { useAppDispatch, useAppSelector } from './hooks';
-import { selectTodoStats, markAllAsCompleted } from './features/todo/todoSlice';
-import { LanguageProvider } from './contexts/LanguageContext';
-import TodoForm from './components/TodoForm';
-import TodoList from './components/TodoList';
-import Sidebar from './components/Sidebar';
-import LanguageToggle from './components/LanguageToggle';
-import './App.css';
+import React, { useState, useEffect, useRef } from 'react';
+import styled, { keyframes, createGlobalStyle } from 'styled-components';
+import Confetti from 'react-confetti';
+import BirthdayCard from './BirthdayCard';
+import birthdaySound from './assets/happy-birthday.mp3'; // Make sure you have this file in src/assets
 
-// Component chính sử dụng Redux
-const TodoApp = () => {
-  const dispatch = useAppDispatch();
-  const { total, active } = useAppSelector(selectTodoStats);
-  const { t } = useTranslation();
+// Keyframes for animations
+const flicker = keyframes`
+  0%, 100% { opacity: 1; transform: scaleY(1); }
+  50% { opacity: 0.7; transform: scaleY(0.95); }
+`;
+
+const gradientAnimation = keyframes`
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+`;
+
+// Global Styles
+const GlobalStyle = createGlobalStyle`
+  @import url('https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Pacifico&display=swap');
   
-  // Sử dụng localStorage hook
-  useLocalStorage();
+  body {
+    /* Animated Gradient Background */
+    background: linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab);
+    background-size: 400% 400%;
+    animation: ${gradientAnimation} 15s ease infinite;
+    
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+    overflow: hidden;
+    font-family: 'Arial', sans-serif;
+  }
+`;
+
+// Styled Components
+const AppContainer = styled.div`
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px;
+  max-width: 100%;
+`;
+
+const Title = styled.h1`
+  font-family: 'Pacifico', cursive;
+  color: #ffffff;
+  font-size: clamp(2.5rem, 10vw, 4.5rem); /* Responsive font size */
+  text-shadow: 3px 3px 6px rgba(0,0,0,0.3);
+  margin-bottom: 20px;
+`;
+
+const StartButton = styled.button`
+  background-color: #ff9a9e;
+  border: none;
+  border-radius: 50px;
+  color: white;
+  padding: 15px 35px;
+  font-size: 1.2rem;
+  font-weight: bold;
+  cursor: pointer;
+  margin-bottom: 20px;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+  
+  &:hover {
+    transform: scale(1.1);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+  }
+`;
+
+const Instruction = styled.p`
+  color: #fff;
+  font-size: 1.3rem;
+  margin-bottom: 20px;
+  text-shadow: 1px 1px 3px rgba(0,0,0,0.2);
+`;
+
+const CakeContainer = styled.div`
+  position: relative;
+  margin-top: 50px;
+`;
+
+const Cake = styled.div`
+  width: 250px;
+  height: 120px;
+  background: #f2d7d5;
+  border-radius: 50% 50% 10px 10px / 20% 20% 10px 10px;
+  position: relative;
+  box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+`;
+
+const Icing = styled.div`
+  position: absolute;
+  top: -10px;
+  left: 0;
+  width: 100%;
+  height: 30px;
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: inset 0 -3px 3px rgba(0,0,0,0.1);
+  
+  &::before {
+    content: '';
+    position: absolute;
+    top: 10px;
+    left: 0;
+    width: 100%;
+    height: 20px;
+    background: repeating-linear-gradient(
+      45deg,
+      #ffc0cb,
+      #ffc0cb 10px,
+      #fff 10px,
+      #fff 20px
+    );
+    border-radius: 50% 50% 0 0;
+  }
+`;
+
+const Candle = styled.div`
+  position: absolute;
+  bottom: 100px;
+  transform: translateX(-50%);
+  width: 10px;
+  height: 50px;
+  background: #f9f9f9;
+  border-radius: 5px 5px 0 0;
+  
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 4px;
+    width: 2px;
+    height: 10px;
+    background: #333;
+  }
+`;
+
+const Flame = styled.div`
+  position: absolute;
+  top: -15px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 10px;
+  height: 15px;
+  background: #ffac33;
+  border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+  animation: ${flicker} 1.5s infinite;
+`;
+
+const App = () => {
+  const [candlesOn, setCandlesOn] = useState(true);
+  const [showConfetti, setShowConfetti] = useState(false);
+  const [showCard, setShowCard] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+
+  const audioContextRef = useRef(null);
+  const analyserRef = useRef(null);
+  const microphoneStreamRef = useRef(null);
+  const audioPlayer = useRef(null);
+
+  const handleBlow = () => {
+    setCandlesOn(false);
+    setShowConfetti(true);
+    setIsListening(false);
+
+    if (audioPlayer.current) {
+        audioPlayer.current.play();
+    }
+    
+    setTimeout(() => setShowCard(true), 1000);
+  };
+
+  useEffect(() => {
+    let animationFrameId;
+
+    if (isListening) {
+      const handleMicInput = async () => {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          microphoneStreamRef.current = stream;
+          const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          audioContextRef.current = audioContext;
+          const source = audioContext.createMediaStreamSource(stream);
+          const analyser = audioContext.createAnalyser();
+          analyser.fftSize = 256;
+          source.connect(analyser);
+          analyserRef.current = analyser;
+
+          const checkBlow = () => {
+            if (!analyserRef.current) return;
+            const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
+            analyserRef.current.getByteFrequencyData(dataArray);
+            const average = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
+            
+            if (average > 65) { // Sensitivity can be adjusted here
+              handleBlow();
+            } else {
+              animationFrameId = requestAnimationFrame(checkBlow);
+            }
+          };
+          checkBlow();
+
+        } catch (err) {
+          console.error('Error accessing microphone:', err);
+          alert("Could not access the microphone. Please grant permission and try again, preferably on Chrome or Firefox.");
+          setIsListening(false);
+        }
+      };
+      handleMicInput();
+    }
+
+    return () => {
+      // Cleanup function
+      cancelAnimationFrame(animationFrameId);
+      if (microphoneStreamRef.current) {
+        microphoneStreamRef.current.getTracks().forEach(track => track.stop());
+      }
+      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+        audioContextRef.current.close().catch(console.error);
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isListening]);
+
+
+  const handleStart = () => {
+    setIsListening(true);
+  };
 
   return (
     <>
-      <div className="bg-pattern"></div>
-      <div className="todo-wrapper">
-        <div className="todo-app">
-          {/* Header */}
-          <div className="header">
-            <div className="todo-input">
-              <h1 className="title">
-                <img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTIwIDJDMzAuNTQ3IDIgMzkgMTAuNDUzIDM5IDIxQzM5IDMxLjU0NyAzMC41NDcgNDAgMjAgNDBDOS40NTMgNDAgMSAzMS41NDcgMSAyMUMxIDEwLjQ1MyA5LjQ1MyAyIDIwIDJaIiBmaWxsPSIjRkZGRkZGIi8+CjxwYXRoIGQ9Ik0xOCA5SDIyVjE5SDE4VjlaIiBmaWxsPSIjMzMzMzIzIi8+CjxwYXRoIGQ9Ik0xNiAxN0gyNFYxOUgxNlYxN1oiIGZpbGw9IiMzMzMzMjMiLz4KPC9zdmc+Cg==" alt="Todo" className="title-1" />
-                {t('title')}
-              </h1>
-              <Sidebar />
-              <TodoForm />
-            </div>
-          </div>
-
-          {/* Main Content */}
-          <div className="main">
-            <div className="todo-list-box">
-              {/* Control Bar */}
-              <div className="bar-message">
-                {total > 0 && (
-                  <button
-                    className="btn-allFinish"
-                    onClick={() => {
-                      if (window.confirm('Confirm to mark all as completed?')) {
-                        dispatch(markAllAsCompleted());
-                      }
-                    }}
-                  >
-                    {t('markAllDone')}
-                  </button>
-                )}
-                <div className="bar-message-text">
-                  {t('slogan')}
-                </div>
-              </div>
-
-              {/* Todo List */}
-              <TodoList />
-              {/* Sidebar */}
-           
-              {/* Status Message */}
-              {total > 0 && (
-                <div className="stats">
-                  {active > 0 ? (
-                    <span>{active} {t('itemsRemaining')}</span>
-                  ) : (
-                    <span>{t('allCompleted')}</span>
-                  )}
-                </div>
-              )}
-            </div>
-
+      <GlobalStyle />
+      <AppContainer>
+        <audio ref={audioPlayer} src={birthdaySound} preload="auto" />
         
-          </div>
+        {showConfetti && (
+          <Confetti 
+            width={window.innerWidth} 
+            height={window.innerHeight} 
+            recycle={false}
+            numberOfPieces={600}
+            tweenDuration={15000}
+            gravity={0.15}
+            wind={0.05}
+            initialVelocityX={5}
+            initialVelocityY={20}
+            colors={['#FFC700', '#FF0000', '#2E3192', '#41BBC7', '#F48024', '#22B573']}
+            confettiSource={{
+              x: 0,
+              y: window.innerHeight,
+              w: window.innerWidth,
+              h: 0,
+            }}
+          />
+        )}
+        
+        <Title>Chúc Mừng Sinh Nhật!</Title>
 
-          {/* Navigation */}
-          <div className="nav">
-            <div className="github">
-              <a href="https://github.com" target="_blank" rel="noreferrer" className="social-link">
-                <img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHZpZXdCb3g9IjAgMCAyMCAyMCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTEwIDBDNC40NzcgMCAwIDQuNDc3IDAgMTBDMCAxNC40MTEgMi44NjYgMTguMTY5IDYuODM5IDE5LjUyOEM3LjA0NyAxOS42NzUgNy4yNzUgMTkuNjE5IDcuMzM5IDE5LjQwNEM3LjQwMyAxOS4xODkgNy4yNzUgMTguOTU2IDcuMDY5IDE4Ljg1NEM0LjI1NyAxNy42NzEgMy4xNDMgMTQuOTc0IDMuMTQzIDEyLjVDMy4xNDMgMTEuNzUgMy4yNSAxMS4wNjMgMy40NTcgMTAuNDE5QzMuNTY5IDEwLjA2MyAzLjQxOSA5LjY5NCAzLjE1IDkuNDU2QzIuODgxIDkuMjE4IDIuNTY5IDkuMTI1IDIuMjUgOS4xODhDMS45MzEgOS4yNTEgMS42NTYgOS40NzUgMS40NzUgOS43ODFDMS4yOTQgMTAuMDg3IDEuMjI1IDEwLjQ0NCAxLjI3NSAxMC43OTlDMS4zMjUgMTEuMTU0IDEuNDk0IDExLjQ4NyAxLjc1IDExLjc1QzEuODc1IDExLjg3NSAxLjkzOCAxMi4wNjMgMS45MzggMTIuMjVDMS45MzggMTIuNDM3IDEuODc1IDEyLjYyNSAxLjc1IDEyLjc1QzEuNjI1IDEyLjg3NSAxLjUgMTMgMS41IDEzLjEyNUMxLjUgMTMuMjUgMS42MjUgMTMuMzc1IDEuNzUgMTMuNUMyLjEyNSAxMy44NzUgMi42MjUgMTQuMjUgMy4yNSAxNC42MjVDMy44NzUgMTUgNC42MjUgMTUuMzc1IDUuNSAxNS43NUM2LjM3NSAxNi4xMjUgNy4zNzUgMTYuNSA4LjUgMTYuODc1QzkuNjI1IDE3LjI1IDEwLjg3NSAxNy40MzggMTIuMjUgMTcuNDM4QzEzLjYyNSAxNy40MzggMTQuODc1IDE3LjI1IDE2IDE2Ljg3NUMxNy4xMjUgMTYuNSAxOC4xMjUgMTYuMTI1IDE5IDE1Ljc1QzE5Ljg3NSAxNS4zNzUgMjAuNjI1IDE1IDIxLjI1IDE0LjYyNUMyMS44NzUgMTQuMjUgMjIuMzc1IDEzLjg3NSAyMi43NSAxMy41QzIyLjg3NSAxMy4zNzUgMjMgMTMuMjUgMjMgMTMuMTI1QzIzIDEzIDIyLjg3NSAxMi44NzUgMjIuNzUgMTIuNzVDMjIuNjI1IDEyLjYyNSAyMi41IDEyLjUgMjIuNSAxMi4zNzVDMjIuNSAxMi4yNSAyMi42MjUgMTIuMTI1IDIyLjc1IDEyQzIyLjg3NSAxMS44NzUgMjIuOTM4IDExLjY4OCAyMi45MzggMTEuNUMyMi45MzggMTEuMzEyIDIyLjg3NSAxMS4xMjUgMjIuNzUgMTAuOTM4QzIyLjYyNSAxMC43NSAyMi41IDEwLjU2MyAyMi41IDEwLjM3NUMyMi41IDEwLjE4OCAyMi42MjUgMTAuMDYzIDIyLjc1IDkuOTM4QzIzLjAxNiA5LjcwNiAyMy4xODUgOS4zNzMgMjMuMjM1IDkuMDM4QzIzLjI4NSA4LjcwMyAyMy4yMTYgOC4zNDYgMjMuMDM1IDguMDQzQzIyLjg1NCA3LjczOSAyMi41NzEgNy41MTUgMjIuMjUgNy40NTJDMjEuOTI5IDcuMzg5IDIxLjU5OCA3LjQ4MiAyMS4zMjkgNy43MkMyMS4wNiA3Ljk1OCAyMC45MSA4LjMyNyAyMC44OTggOC43MTlDMjAuODg2IDkuMTExIDIwLjkxOSA5LjQ4NiAyMC45OTIgOS44NDFDMjEuMDY1IDEwLjE5NiAyMS4xODggMTAuNTMxIDIxLjM2MSAxMC44NDZDMTkuNzE0IDkuNzUgMTcuNzUgOS4xODggMTUuNTYzIDkuMTg4QzE0LjQzOCA5LjE4OCAxMy4zNzUgOS4zNzUgMTIuMzc1IDkuNzVDMTEuMzc1IDEwLjEyNSAxMC40NjkgMTAuNjI1IDkuNjU2IDExLjI1QzguODQzIDExLjg3NSA4LjE1NiAxMi42MjUgNy41OTQgMTMuNUMyLjg1NiAxNC45NzQgMS43NDMgMTcuNjc5IDAuNzUgMTguODU0QzAuNTQ0IDE4Ljk1NiAwLjQxNiAxOS4xODkgMC40OCAxOS40MDRDMC41NDQgMTkuNjE5IDAuNzcyIDE5LjY3NSAxLjA2OSAxOS41MjhDNS4xMzQgMTguMTY5IDggMTQuNDExIDggMTBDOCA0LjQ3NyAzLjUyMyAwIDEwIDBaIiBmaWxsPSJ3aGl0ZSIvPgo8L3N2Zz4K" alt="GitHub" className="ic-social" />
-              </a>
-            </div>
-            <div className="about">
-              <div className="info">
-                <div className="info-ico">{t('about')}</div>
-              </div>
-            </div>
-            <LanguageToggle />
-          </div>
-        </div>
-      </div>
+        {!isListening && candlesOn && (
+          <StartButton onClick={handleStart}>
+            Nhấn vào đây và thổi nến nhé!
+          </StartButton>
+        )}
+
+        {isListening && candlesOn && (
+          <Instruction>Hãy thổi vào micro để tắt nến!</Instruction>
+        )}
+
+        <CakeContainer>
+          <Cake>
+            <Icing />
+            {candlesOn && (
+              <>
+                <Candle style={{ left: '30%' }}><Flame /></Candle>
+                <Candle style={{ left: '50%' }}><Flame /></Candle>
+                <Candle style={{ left: '70%' }}><Flame /></Candle>
+              </>
+            )}
+          </Cake>
+        </CakeContainer>
+
+        {showCard && <BirthdayCard />}
+      </AppContainer>
     </>
   );
 };
-
-// App component với Redux Provider
-function App() {
-  return (
-    <Provider store={store}>
-      <LanguageProvider>
-        <TodoApp />
-      </LanguageProvider>
-    </Provider>
-  );
-}
 
 export default App;
